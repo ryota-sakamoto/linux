@@ -1,13 +1,30 @@
 /*
  * Test cases for lib/hexdump.c module.
  */
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
+#include <kunit/test.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/random.h>
 #include <linux/string.h>
+
+struct hexdump_test_case {
+	const char *str;
+	bool ascii;
+};
+
+static struct hexdump_test_case hexdump_cases[] = {
+	{
+		.str = "ascii",
+		.ascii = true,
+	},
+	{
+		.str = "non ascii",
+		.ascii = false,
+	},
+};
+
+KUNIT_ARRAY_PARAM_DESC(hexdump, hexdump_cases, str);
 
 static const unsigned char data_b[] = {
 	'\xbe', '\x32', '\xdb', '\x7b', '\x0a', '\x18', '\x93', '\xb2',	/* 00 - 07 */
@@ -64,7 +81,7 @@ static const char * const test_data_8_be[] __initconst = {
 static unsigned total_tests __initdata;
 static unsigned failed_tests __initdata;
 
-static void __init test_hexdump_prepare_test(size_t len, int rowsize,
+static void test_hexdump_prepare_test(size_t len, int rowsize,
 					     int groupsize, char *test,
 					     size_t testlen, bool ascii)
 {
@@ -122,7 +139,7 @@ static void __init test_hexdump_prepare_test(size_t len, int rowsize,
 
 #define TEST_HEXDUMP_BUF_SIZE		(32 * 3 + 2 + 32 + 1)
 
-static void __init test_hexdump(size_t len, int rowsize, int groupsize,
+static void test_hexdump(size_t len, int rowsize, int groupsize,
 				bool ascii)
 {
 	char test[TEST_HEXDUMP_BUF_SIZE];
@@ -146,18 +163,20 @@ static void __init test_hexdump(size_t len, int rowsize, int groupsize,
 	}
 }
 
-static void __init test_hexdump_set(int rowsize, bool ascii)
+static void test_hexdump_set(struct kunit *test)
 {
+	const struct hexdump_test_case *params = test->param_value;
+	int rowsize = get_random_u32_inclusive(1, 2) * 16;
 	size_t d = min_t(size_t, sizeof(data_b), rowsize);
 	size_t len = get_random_u32_inclusive(1, d);
 
-	test_hexdump(len, rowsize, 4, ascii);
-	test_hexdump(len, rowsize, 2, ascii);
-	test_hexdump(len, rowsize, 8, ascii);
-	test_hexdump(len, rowsize, 1, ascii);
+	test_hexdump(len, rowsize, 4, params->ascii);
+	test_hexdump(len, rowsize, 2, params->ascii);
+	test_hexdump(len, rowsize, 8, params->ascii);
+	test_hexdump(len, rowsize, 1, params->ascii);
 }
 
-static void __init test_hexdump_overflow(size_t buflen, size_t len,
+static void test_hexdump_overflow(size_t buflen, size_t len,
 					 int rowsize, int groupsize,
 					 bool ascii)
 {
@@ -205,8 +224,9 @@ static void __init test_hexdump_overflow(size_t buflen, size_t len,
 	}
 }
 
-static void __init test_hexdump_overflow_set(size_t buflen, bool ascii)
+static void test_hexdump_overflow_set(size_t buflen, bool ascii)
 {
+	// const struct hexdump_test_case *params = test->param_value;
 	unsigned int i = 0;
 	int rs = get_random_u32_inclusive(1, 2) * 16;
 
@@ -218,18 +238,9 @@ static void __init test_hexdump_overflow_set(size_t buflen, bool ascii)
 	} while (i++ < 3);
 }
 
-static int __init test_hexdump_init(void)
+static int test_hexdump_init(void)
 {
 	unsigned int i;
-	int rowsize;
-
-	rowsize = get_random_u32_inclusive(1, 2) * 16;
-	for (i = 0; i < 16; i++)
-		test_hexdump_set(rowsize, false);
-
-	rowsize = get_random_u32_inclusive(1, 2) * 16;
-	for (i = 0; i < 16; i++)
-		test_hexdump_set(rowsize, true);
 
 	for (i = 0; i <= TEST_HEXDUMP_BUF_SIZE; i++)
 		test_hexdump_overflow_set(i, false);
@@ -244,13 +255,18 @@ static int __init test_hexdump_init(void)
 
 	return failed_tests ? -EINVAL : 0;
 }
-module_init(test_hexdump_init);
 
-static void __exit test_hexdump_exit(void)
-{
-	/* do nothing */
-}
-module_exit(test_hexdump_exit);
+static struct kunit_case hexdump_test_cases[] = {
+	KUNIT_CASE_PARAM(test_hexdump_set, hexdump_gen_params),
+	{},
+};
+
+static struct kunit_suite hexdump_test_suite = {
+	.name = "hexdump",
+	.test_cases = hexdump_test_cases,
+};
+
+kunit_test_suite(hexdump_test_suite);
 
 MODULE_AUTHOR("Andy Shevchenko <andriy.shevchenko@linux.intel.com>");
 MODULE_DESCRIPTION("Test cases for lib/hexdump.c module");
