@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config LIBFS_KUNIT_TEST
+	tristate "KUnit tests for libfs" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  This builds the libfs KUnit tests.
